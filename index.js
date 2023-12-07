@@ -5,97 +5,187 @@ const AdblockerPlugin = require('puppeteer-extra-plugin-adblocker');
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 
-puppeteer.launch({ headless: false }).then(async browser => {
-    const links = [
-        'http://daotaocobanunicity.com/pluginfile.php/39/mod_scorm/content/5/res/index.html',
-        'http://daotaocobanunicity.com/pluginfile.php/41/mod_scorm/content/3/res/index.html',
-        'http://daotaocobanunicity.com/pluginfile.php/43/mod_scorm/content/4/res/index.html',
-        'http://daotaocobanunicity.com/pluginfile.php/45/mod_scorm/content/5/res/index.html',
-        'http://daotaocobanunicity.com/pluginfile.php/47/mod_scorm/content/5/res/index.html'
-    ];
-// ======================================================= PAGE 1
-    const page = await browser.newPage();
-    // await page.setViewport({ width: 500, height: 500 })
+async function launchBrowser() {
+    const browser = await puppeteer.launch({
+        headless: false,
+        args: ['--window-size=400,450'],
+        defaultViewport: null, 
+        protocolTimeout: 60000,
+    });
+    return browser;
+}
 
-    await page.goto('http://daotaocobanunicity.com/login/');
-    await page.waitForTimeout(1000);
-
-    await page.type('#username', '458943284');
-    await page.type('#word', '070086000459');
-    await page.waitForTimeout(1000);
-    await page.click('#loginbtn');
-    await page.waitForTimeout(2000);
+async function runScraping(user, pass) {
+    const browser = await launchBrowser();
 
     try {
+        const links = [
+            {
+                link: 'http://daotaocobanunicity.com/mod/scorm/view.php?id=20',
+                name: 'ke hoach tra thuong'
+            },{
+                link: 'http://daotaocobanunicity.com/mod/scorm/view.php?id=18',
+                name: 'quy tac hoat dong'
+            },{
+                link: 'http://daotaocobanunicity.com/mod/scorm/view.php?id=12',
+                name: 'Pháp luật về bán hàng đa cấp'
+            },{
+                link: 'http://daotaocobanunicity.com/mod/scorm/view.php?id=14',
+                name: ' Chuẩn mực đạo đức trong hoạt động bán hàng đa cấp'
+            },{
+                link: 'http://daotaocobanunicity.com/mod/scorm/view.php?id=16',
+                name: 'Hợp đồng tham gia bán hàng đa cấp'
+            },
+        ]
         const page = await browser.newPage();
-        await page.goto(links[0]);
+        await page.goto('http://daotaocobanunicity.com/login/');
+        await page.waitForTimeout(1000);
+        console.log(user, pass)
+        await page.type('#username', user);
+        await page.type('#password', pass);
+        await page.waitForTimeout(1000);
+        await page.click('#loginbtn');
+        await page.waitForTimeout(1000);
 
-        const title = await page.title();
-        console.log(`title: ${title}`);
-        await page.waitForSelector('body');
+        const page1 = await browser.newPage();
+        await page1.goto(links[0].link);
+        runScreenTab(page1, links[0].name)
 
-        await page.waitForTimeout(3000);
+        const page2 = await browser.newPage();
+        await page2.goto(links[1].link);
+        runScreenTab(page2, links[1].name)
 
-        page.click('.launch-screen-button__play-icon');
+        const page3 = await browser.newPage(); 
+        await page3.goto(links[2].link);
+        runScreenTab(page3, links[2].name)
 
-        await page.waitForTimeout(2000);
+        const page4 = await browser.newPage();
+        await page4.goto(links[3].link);
+        runScreenTab(page4, links[3].name)
 
-        for (let j = 0; j < 100; j++) {
-            const progressbarLabelContent = await page.$eval('.progressbar__label_type_time', element => element.textContent);
-            const time = formatTime(progressbarLabelContent);
-            console.log(time);
-
-            await new Promise(resolve => {
-                setTimeout(async () => {
-                    console.log('click');
-                    await page.click('.universal-control-panel__button_next');
-                    resolve();
-                }, time + 2000);
-            });
-        }
+        const page5 = await browser.newPage();
+        await page5.goto(links[4].link);
+        runScreenTab(page5, links[4].name)
 
     } catch (error) {
-        console.log(error);
+        console.log(error.message);
+    } finally {
+        console.log('finally')
     }
+}
 
-   
-});
+async function runScreenTab(page, namePage) {
+    try {
+        const iframeSelector = '#scorm_object';
+        await page.waitForSelector(iframeSelector);
+        const frame = await page.$(iframeSelector);
+        const frameContent = await frame.contentFrame();
+        
+        await page.waitForTimeout(100);
 
+        // page.click('.launch-screen-button__icon');
 
-function formatTime(stringTime, delay = 1.5){
+        for (let j = 0; j < 10000; j++) {
+
+            const nextButtonSelector = '.universal-control-panel__button_next';
+            const dialog = '.message-box__content';
+            const btnDialog = '.message-box-buttons-panel__window-button';
+
+            let timeLabelContent 
+            timeLabelContent = await frameContent.$eval('.progressbar__label_type_time', element => element.textContent);
+            timeLabelContent = await formatTime(timeLabelContent)
+            timeLabelContent = timeLabelContent.afterTotalSeconds - timeLabelContent.beforeTotalSeconds
+            console.log('time => ', timeLabelContent)
+
+            if(isNaN(timeLabelContent)) {
+                timeLabelContent = await frameContent.$eval('.progressbar__label_type_time', element => element.textContent);
+                timeLabelContent = await formatTime(timeLabelContent)
+                timeLabelContent = timeLabelContent.afterTotalSeconds - timeLabelContent.beforeTotalSeconds
+                console.log('time (again) => ', timeLabelContent)
+            }
+
+            try {
+                if(typeof(timeLabelContent) === 'number'){
+                    await new Promise(resolve => {
+                        setTimeout(async () => { // video ngan qua thi khong doi 3s
+                            await frameContent.waitForSelector(nextButtonSelector).catch(() => {});
+
+                            if(timeLabelContent == 0){
+                                try {
+                                    console.log('click');
+                                    await frameContent.waitForSelector(dialog).catch(() => {});
+                                    await frameContent.waitForSelector(btnDialog).catch(() => {});
+                                    await frameContent.click(btnDialog);
+                                    await frameContent.click(btnDialog);
+                                    await frameContent.click(nextButtonSelector);
+                                } catch (error) {
+                                    console.log('trang =>', namePage)
+                                    resolve();
+                                }
+                                resolve();
+                            }
+
+                            if(timeLabelContent > 7000){ 
+                                await page.waitForTimeout(3000)
+                                await frameContent.click(nextButtonSelector);
+                                console.log('click');
+                                resolve();
+                            } else{
+                                await frameContent.click(nextButtonSelector);
+                                console.log('click');
+                                try {
+                                    await frameContent.waitForSelector(dialog).catch(() => {});
+                                    await frameContent.waitForSelector(btnDialog).catch(() => {});
+                                    await frameContent.click(btnDialog);
+                                } catch (error) {
+                                    console.log('trang =>', namePage)
+                                    resolve();
+                                }
+                                resolve();
+                            }
+                            
+                        }, timeLabelContent );
+                    });
+                }else{
+                    console.log('cancel')
+                }
+            } catch (error) {
+                console.log('trang =>', namePage)
+                console.log(error.message)
+                continue;
+            }
+        }
+
+        
+    } catch (error) {
+        console.log('trang =>', namePage)
+        console.log(error.message)
+    }
+}
+
+async function formatTime(stringTime, delay = 1) {
     const timeParts = stringTime.split(" / ");
+    const timeBeforeSlash = timeParts[0];
     const timeAfterSlash = timeParts[1];
 
-    const [minutes, seconds] = timeAfterSlash.split(":");
-    const totalSeconds = parseInt(minutes, 10) * 60 + parseInt(seconds, 10) + delay;
+    const [beforeMinutes, beforeSeconds] = timeBeforeSlash.split(":");
+    const beforeTotalSeconds = await parseInt(beforeMinutes, 10) * 60 + parseInt(beforeSeconds, 10) + delay;
 
-    console.log("Thông tin phía sau:", timeAfterSlash);
-    console.log("Tổng số giây:", totalSeconds);
-    return totalSeconds * 1000
+    const [afterMinutes, afterSeconds] = timeAfterSlash.split(":");
+    const afterTotalSeconds = await parseInt(afterMinutes, 10) * 60 + parseInt(afterSeconds, 10) + delay;
+
+    return {
+        beforeTotalSeconds : beforeTotalSeconds * 1000,
+        afterTotalSeconds : afterTotalSeconds * 1000
+    };
 }
 
 
 
-// 461056984
-// 014068005399
-// Sơn
-// 461054984
-// 079093024269
-// Sơn
-// 461053284
-// 045182000553
-// Sơn
-// 461027684
-// 015300005089
-// Sơn
 
 
-// 461027284
-// 070305007545
-// Sơn
 
-// 461010784 
-// 038082024389
-// Sơn
-// 460993184
-// 036188024491
+
+
+
+runScraping('', '');
